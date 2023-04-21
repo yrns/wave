@@ -11,3 +11,7 @@ hound = "3.5.0"
 softbuffer = "0.2.0"
 winit = "0.28.3"
 anyhow = "1.0.70"
+
+[dev-dependencies]
+#png = "0.17.8"
+image = "0.24.6"

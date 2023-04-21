@@ -39,6 +39,47 @@ fn load(path: &str) -> Result<Vec<f64>, hound::Error> {
     Ok(samples)
 }
 
+fn generate(samples: &[f64], width: u32, height: u32) -> Vec<u32> {
+    let mut buffer: Vec<u32> = vec![0xffffffff; (width * height) as usize];
+
+    // band height
+    let bandh = 128u32;
+
+    for (i, s) in samples.iter().enumerate() {
+        let i = i as u32;
+        let x = i % width;
+        let y = i / width;
+        let y = y * bandh + bandh / 2;
+
+        let index = (x + y * width) as usize;
+        if index >= buffer.len() {
+            break;
+        } else {
+            // draw gray line as midpoint of the band
+            buffer[index] = 0x00eeeeee;
+        }
+
+        // draw reddish if clipping?
+        let color = if s.abs() > 1.0f64 {
+            0x00ff3333
+        } else {
+            0x00333333
+        };
+        let s = (s.clamp(-1.0, 1.0) * (bandh / 2) as f64) as i32;
+        let y = (y as i32 - s) as u32;
+
+        let index = (x + y * width) as usize;
+        if index >= buffer.len() {
+            continue;
+        } else {
+            // draw sample
+            buffer[index] = color;
+        }
+    }
+
+    buffer
+}
+
 fn display(samples: Vec<f64>) -> Result<()> {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop)?;
@@ -62,42 +103,7 @@ fn display(samples: Vec<f64>) -> Result<()> {
 
                 let (width, height) = (size.width, size.height);
 
-                let mut buffer: Vec<u32> = vec![0x00ffffff; (width * height) as usize];
-
-                // band height
-                let bandh = 128u32;
-
-                for (i, s) in samples.iter().enumerate() {
-                    let i = i as u32;
-                    let x = i % width;
-                    let y = i / width;
-                    let y = y * bandh + bandh / 2;
-
-                    let index = (x + y * width) as usize;
-                    if index >= buffer.len() {
-                        break;
-                    } else {
-                        // draw gray line as midpoint of the band
-                        buffer[index] = 0x00cccccc;
-                    }
-
-                    // draw reddish if clipping?
-                    let color = if s.abs() > 1.0f64 {
-                        0x00ff3333
-                    } else {
-                        0x00333333
-                    };
-                    let s = (s.clamp(-1.0, 1.0) * (bandh / 2) as f64) as i32;
-                    let y = (y as i32 - s) as u32;
-
-                    let index = (x + y * width) as usize;
-                    if index >= buffer.len() {
-                        continue;
-                    } else {
-                        // draw sample
-                        buffer[index] = color;
-                    }
-                }
+                let buffer = generate(&samples, width, height);
 
                 graphics_context.set_buffer(&buffer, width as u16, height as u16);
             }
@@ -115,9 +121,42 @@ fn display(samples: Vec<f64>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // use std::fs::File;
+    // use std::io::BufWriter;
+    // use std::path::Path;
 
     #[test]
-    fn it_works() {
-        display(load("sine.wav").unwrap()).unwrap();
+    fn generate_png() {
+        let samples = load("sine.wav").unwrap();
+        let buffer = generate(&samples, 1024, 720);
+
+        // Convert to bytes.
+        let mut data: Vec<u8> = Vec::new();
+        for color in buffer {
+            data.extend(&color.to_ne_bytes()[0..=2])
+
+            // match color.to_ne_bytes() {
+            //     c @ [r, g, b, a] => {
+            //         if r < 255 || g < 255 || b < 255 {
+            //             println!("{a} {r} {g} {b}")
+            //         }
+            //         data.push(r);
+            //         data.push(g);
+            //         data.push(b);
+            //     }
+            // }
+        }
+
+        // let path = Path::new("sine.png");
+        // let file = File::create(path).unwrap();
+        // let mut w = BufWriter::new(file);
+
+        // let mut encoder = png::Encoder::new(&mut w, 1024, 720);
+        // encoder.set_color(png::ColorType::Rgb);
+        // encoder.set_depth(png::BitDepth::Eight);
+        // let mut writer = encoder.write_header().unwrap();
+        // writer.write_image_data(&data).unwrap();
+
+        image::save_buffer("sine.png", &data, 1024, 720, image::ColorType::Rgb8).unwrap();
     }
 }
