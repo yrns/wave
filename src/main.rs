@@ -42,14 +42,14 @@ fn load(path: &str) -> Result<Vec<f64>, hound::Error> {
 fn generate(samples: &[f64], width: u32, height: u32) -> Vec<u32> {
     let mut buffer: Vec<u32> = vec![0xffffffff; (width * height) as usize];
 
-    // band height
-    let bandh = 128u32;
+    let bandh = 64u32; // band height
+    let space = 16; // space between bands
 
     for (i, s) in samples.iter().enumerate() {
         let i = i as u32;
         let x = i % width;
         let y = i / width;
-        let y = y * bandh + bandh / 2;
+        let y = space + y * (bandh + space) + bandh / 2;
 
         let index = (x + y * width) as usize;
         if index >= buffer.len() {
