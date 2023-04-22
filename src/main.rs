@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use anyhow::Result;
 //use rayon::prelude::*;
+use notify_debouncer_mini::notify::*;
 use softbuffer::GraphicsContext;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -11,11 +14,10 @@ fn main() {
         eprintln!("Usage: {} <input.wav>", args[0]);
         std::process::exit(1);
     }
-    let samples = load(&args[1]).unwrap();
-    display(samples).unwrap();
+    display(Path::new(&args[1])).unwrap();
 }
 
-fn load(path: &str) -> Result<Vec<f64>, hound::Error> {
+fn load(path: &Path) -> Result<Vec<f64>, hound::Error> {
     let mut reader = hound::WavReader::open(path)?;
 
     println!("{:?}", reader.spec());
@@ -80,40 +82,65 @@ fn generate(samples: &[f64], width: u32, height: u32) -> Vec<u32> {
     buffer
 }
 
-fn display(samples: Vec<f64>) -> Result<()> {
+fn display(path: &Path) -> Result<()> {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop)?;
     let mut graphics_context =
         unsafe { GraphicsContext::new(&window, &window) }.expect("graphics context");
 
-    //let mut size0 = None;
+    // Need to own it.
+    let path = path.to_path_buf();
+    let mut samples = load(&path).unwrap();
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut debouncer =
+        notify_debouncer_mini::new_debouncer(std::time::Duration::from_secs_f32(0.25), None, tx)
+            .unwrap();
+    debouncer
+        .watcher()
+        .watch(&path, RecursiveMode::NonRecursive)
+        .unwrap();
+
+    let proxy = event_loop.create_proxy();
+
+    // Bounce watcher events to the event loop.
+    std::thread::spawn(move || {
+        while let Ok(e) = rx.recv() {
+            match e {
+                Ok(_) => {
+                    if let Err(_) = proxy.send_event(()) {
+                        // event loop closed
+                        return;
+                    }
+                }
+                Err(e) => eprintln!("watch error: {e:?}"),
+            }
+        }
+    });
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        control_flow.set_wait();
 
-        match event {
-            Event::RedrawRequested(window_id) if window_id == window.id() => {
-                let size = window.inner_size();
-
-                // dbg!("redraw", size);
-                // if Some(size) != size0 {
-                //     size0 = Some(size);
-                //     return;
-                // }
-
-                let (width, height) = (size.width, size.height);
-
-                let buffer = generate(&samples, width, height);
-
-                graphics_context.set_buffer(&buffer, width as u16, height as u16);
+        let redraw = match event {
+            Event::UserEvent(_) => {
+                samples = load(&path).unwrap();
+                true
             }
+            Event::RedrawRequested(window_id) if window_id == window.id() => true,
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => {
                 *control_flow = ControlFlow::Exit;
+                false
             }
-            _ => {}
+            _ => false,
+        };
+
+        if redraw {
+            let (width, height) = window.inner_size().into();
+            let buffer = generate(&samples, width, height);
+            graphics_context.set_buffer(&buffer, width as u16, height as u16);
         }
     });
 }
@@ -127,7 +154,7 @@ mod tests {
 
     #[test]
     fn generate_png() {
-        let samples = load("sine.wav").unwrap();
+        let samples = load(Path::new("sine.wav")).unwrap();
         let buffer = generate(&samples, 1024, 720);
 
         // Convert to bytes.
