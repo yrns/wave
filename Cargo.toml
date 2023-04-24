@@ -12,7 +12,7 @@ softbuffer = "0.2.0"
 winit = "0.28.3"
 anyhow = "1.0.70"
 notify-debouncer-mini = "0.2.1"
+image = { version = "0.24.6", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 #png = "0.17.8"
-image = "0.24.6"

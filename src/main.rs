@@ -2,6 +2,7 @@ use std::path::Path;
 
 use anyhow::Result;
 //use rayon::prelude::*;
+use image::*;
 use notify_debouncer_mini::notify::*;
 use softbuffer::GraphicsContext;
 use winit::event::{Event, WindowEvent};
@@ -41,45 +42,46 @@ fn load(path: &Path) -> Result<Vec<f64>, hound::Error> {
     Ok(samples)
 }
 
-fn generate(samples: &[f64], width: u32, height: u32) -> Vec<u32> {
-    let mut buffer: Vec<u32> = vec![0xffffffff; (width * height) as usize];
+// Blank white.
+pub fn white(width: u32, height: u32) -> RgbImage {
+    RgbImage::from_vec(width, height, vec![0xff; (width * height * 3) as usize]).unwrap()
+}
 
-    let bandh = 64u32; // band height
-    let space = 16; // space between bands
+const BANDH: u32 = 64; // band height
+const SPACE: u32 = 16; // space between bands
+
+fn generate(samples: &[f64], width: u32, height: u32) -> RgbImage {
+    let mut image = white(width, height);
 
     for (i, s) in samples.iter().enumerate() {
         let i = i as u32;
         let x = i % width;
         let y = i / width;
-        let y = space + y * (bandh + space) + bandh / 2;
+        let y = SPACE + y * (BANDH + SPACE) + BANDH / 2;
 
-        let index = (x + y * width) as usize;
-        if index >= buffer.len() {
-            break;
-        } else {
-            // draw gray line as midpoint of the band
-            buffer[index] = 0x00eeeeee;
+        // draw gray line as midpoint of the band
+        match image.get_pixel_mut_checked(x, y) {
+            Some(p) => p.0 = [0xee; 3],
+            None => break,
         }
 
         // draw reddish if clipping?
         let color = if s.abs() > 1.0f64 {
-            0x00ff3333
+            [0xff, 0x33, 0x33]
         } else {
-            0x00333333
+            [0x33; 3]
         };
-        let s = (s.clamp(-1.0, 1.0) * (bandh / 2) as f64) as i32;
+        let s = (s.clamp(-1.0, 1.0) * (BANDH / 2) as f64) as i32;
         let y = (y as i32 - s) as u32;
 
-        let index = (x + y * width) as usize;
-        if index >= buffer.len() {
-            continue;
-        } else {
-            // draw sample
-            buffer[index] = color;
+        // draw sample
+        match image.get_pixel_mut_checked(x, y) {
+            Some(p) => p.0 = color,
+            None => continue,
         }
     }
 
-    buffer
+    image
 }
 
 fn display(path: &Path) -> Result<()> {
@@ -139,51 +141,44 @@ fn display(path: &Path) -> Result<()> {
 
         if redraw {
             let (width, height) = window.inner_size().into();
-            let buffer = generate(&samples, width, height);
+
+            // Resize to window width, keep height.
+            let image = generate1(&samples, width);
+
+            let mut bg = white(width, height);
+            imageops::overlay(&mut bg, &image, 0, 0);
+
+            // Convert to ARGB as u32:
+            let buffer: Vec<_> = DynamicImage::ImageRgb8(bg)
+                .to_rgba8()
+                .pixels()
+                .map(|p| {
+                    let p: u32 = unsafe { std::mem::transmute(p.0) };
+                    p
+                })
+                .collect();
+
             graphics_context.set_buffer(&buffer, width as u16, height as u16);
         }
     });
 }
 
+pub fn generate1(samples: &[f64], width: u32) -> RgbImage {
+    let image = generate(samples, samples.len() as u32, BANDH + SPACE * 2);
+    let height = image.height();
+    DynamicImage::ImageRgb8(image)
+        .resize_exact(width, height, imageops::FilterType::Triangle)
+        .into_rgb8()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use std::fs::File;
-    // use std::io::BufWriter;
-    // use std::path::Path;
 
     #[test]
     fn generate_png() {
         let samples = load(Path::new("sine.wav")).unwrap();
-        let buffer = generate(&samples, 1024, 720);
-
-        // Convert to bytes.
-        let mut data: Vec<u8> = Vec::new();
-        for color in buffer {
-            data.extend(&color.to_ne_bytes()[0..=2])
-
-            // match color.to_ne_bytes() {
-            //     c @ [r, g, b, a] => {
-            //         if r < 255 || g < 255 || b < 255 {
-            //             println!("{a} {r} {g} {b}")
-            //         }
-            //         data.push(r);
-            //         data.push(g);
-            //         data.push(b);
-            //     }
-            // }
-        }
-
-        // let path = Path::new("sine.png");
-        // let file = File::create(path).unwrap();
-        // let mut w = BufWriter::new(file);
-
-        // let mut encoder = png::Encoder::new(&mut w, 1024, 720);
-        // encoder.set_color(png::ColorType::Rgb);
-        // encoder.set_depth(png::BitDepth::Eight);
-        // let mut writer = encoder.write_header().unwrap();
-        // writer.write_image_data(&data).unwrap();
-
-        image::save_buffer("sine.png", &data, 1024, 720, image::ColorType::Rgb8).unwrap();
+        let image = generate1(&samples, 640);
+        image.save("sine.png").unwrap();
     }
 }
