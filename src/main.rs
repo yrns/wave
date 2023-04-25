@@ -53,6 +53,8 @@ const SPACE: u32 = 16; // space between bands
 fn generate(samples: &[f64], width: u32, height: u32) -> RgbImage {
     let mut image = white(width, height);
 
+    let mut y0 = 0;
+
     for (i, s) in samples.iter().enumerate() {
         let i = i as u32;
         let x = i % width;
@@ -74,11 +76,16 @@ fn generate(samples: &[f64], width: u32, height: u32) -> RgbImage {
         let s = (s.clamp(-1.0, 1.0) * (BANDH / 2) as f64) as i32;
         let y = (y as i32 - s) as u32;
 
-        // draw sample
-        match image.get_pixel_mut_checked(x, y) {
-            Some(p) => p.0 = color,
-            None => continue,
+        // draw sample as a vertical line from the previous sample y
+        let line = if y0 <= y { y0..=y } else { y..=y0 };
+        for i in line {
+            match image.get_pixel_mut_checked(x, i) {
+                Some(p) => p.0 = color,
+                None => continue,
+            }
         }
+
+        y0 = y;
     }
 
     image
