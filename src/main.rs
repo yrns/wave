@@ -180,9 +180,15 @@ fn display(path: &Path) -> Result<()> {
 pub fn generate1(samples: &[f64], width: u32) -> RgbImage {
     let image = generate(samples, samples.len() as u32, BANDH + SPACE * 2);
     let height = image.height();
-    DynamicImage::ImageRgb8(image)
-        .resize_exact(width, height, imageops::FilterType::Triangle)
-        .into_rgb8()
+
+    if samples.len() as u32 <= width {
+        image
+    } else {
+        // Resize to fit width.
+        DynamicImage::ImageRgb8(image)
+            .resize_exact(width, height, imageops::FilterType::Triangle)
+            .into_rgb8()
+    }
 }
 
 #[cfg(test)]
