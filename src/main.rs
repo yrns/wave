@@ -93,7 +93,14 @@ fn generate(samples: &[f64], width: u32, height: u32) -> RgbImage {
 
 fn display(path: &Path) -> Result<()> {
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop)?;
+    let window = WindowBuilder::new()
+        .with_title(format!(
+            "wave: {}",
+            path.file_name()
+                .map(|s| s.to_string_lossy())
+                .unwrap_or_else(|| "-".into())
+        ))
+        .build(&event_loop)?;
     let mut graphics_context =
         unsafe { GraphicsContext::new(&window, &window) }.expect("graphics context");
 
