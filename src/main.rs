@@ -42,16 +42,16 @@ fn load(path: &Path) -> Result<Vec<f64>, hound::Error> {
     Ok(samples)
 }
 
-// Blank white.
-pub fn white(width: u32, height: u32) -> RgbImage {
-    RgbImage::from_vec(width, height, vec![0xff; (width * height * 3) as usize]).unwrap()
+// Blank greyscale image.
+pub fn blank(width: u32, height: u32, grey: u8) -> RgbImage {
+    RgbImage::from_vec(width, height, vec![grey; (width * height * 3) as usize]).unwrap()
 }
 
 const BANDH: u32 = 64; // band height
 const SPACE: u32 = 16; // space between bands
 
 fn generate(samples: &[f64], width: u32, height: u32) -> RgbImage {
-    let mut image = white(width, height);
+    let mut image = blank(width, height, 0xfc);
 
     let mut y0 = 0;
 
@@ -159,7 +159,7 @@ fn display(path: &Path) -> Result<()> {
             // Resize to window width, keep height.
             let image = generate1(&samples, width);
 
-            let mut bg = white(width, height);
+            let mut bg = blank(width, height, 0xff);
             imageops::overlay(&mut bg, &image, 0, 0);
 
             // Convert to ARGB as u32:
