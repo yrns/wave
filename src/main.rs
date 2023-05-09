@@ -104,7 +104,7 @@ fn display(path: &Path) -> Result<()> {
 
     let (tx, rx) = std::sync::mpsc::channel();
     let mut debouncer =
-        notify_debouncer_mini::new_debouncer(std::time::Duration::from_secs_f32(0.25), None, tx)?;
+        notify_debouncer_mini::new_debouncer(std::time::Duration::from_secs_f32(1.0), None, tx)?;
     debouncer
         .watcher()
         .watch(&path, RecursiveMode::NonRecursive)?;
