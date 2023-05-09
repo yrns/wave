@@ -9,37 +9,31 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
-fn main() {
+fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: {} <input.wav>", args[0]);
         std::process::exit(1);
     }
-    display(Path::new(&args[1])).unwrap();
+    display(Path::new(&args[1]))
 }
 
 fn load(path: &Path) -> Result<Vec<f64>, hound::Error> {
     let mut reader = hound::WavReader::open(path)?;
 
-    println!("{:?}", reader.spec());
+    println!("spec: {:?} duration: {}", reader.spec(), reader.duration());
 
     // Convert samples to f64.
-    let samples: Vec<_> = match reader.spec().sample_format {
-        hound::SampleFormat::Float => reader.samples::<f32>().map(|s| s.unwrap() as f64).collect(),
+    match reader.spec().sample_format {
+        hound::SampleFormat::Float => reader
+            .samples::<f32>()
+            .map(|s| s.map(|s| s as f64))
+            .collect(),
         hound::SampleFormat::Int => reader
             .samples::<i16>()
-            .map(|s| (s.unwrap() as f64) / (i16::MAX as f64))
+            .map(|s| s.map(|i| i as f64 / i16::MAX as f64))
             .collect(),
-    };
-
-    //let id = || (f64::INFINITY, f64::NEG_INFINITY);
-    // let (min, max) = samples
-    //     .par_iter()
-    //     .fold(id, |(min, max), a| (min.min(*a), max.max(*a)))
-    //     .reduce(id, |a, b| (a.0.min(b.0), a.1.max(b.1)));
-    // println!("{} samples, min: {} max: {}", samples.len(), min, max);
-
-    Ok(samples)
+    }
 }
 
 // Blank greyscale image.
@@ -106,16 +100,14 @@ fn display(path: &Path) -> Result<()> {
 
     // Need to own it.
     let path = path.to_path_buf();
-    let mut samples = load(&path).unwrap();
+    let mut samples = load(&path)?;
 
     let (tx, rx) = std::sync::mpsc::channel();
     let mut debouncer =
-        notify_debouncer_mini::new_debouncer(std::time::Duration::from_secs_f32(0.25), None, tx)
-            .unwrap();
+        notify_debouncer_mini::new_debouncer(std::time::Duration::from_secs_f32(0.25), None, tx)?;
     debouncer
         .watcher()
-        .watch(&path, RecursiveMode::NonRecursive)
-        .unwrap();
+        .watch(&path, RecursiveMode::NonRecursive)?;
 
     let proxy = event_loop.create_proxy();
 
