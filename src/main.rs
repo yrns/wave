@@ -130,10 +130,16 @@ fn display(path: &Path) -> Result<()> {
         control_flow.set_wait();
 
         let redraw = match event {
-            Event::UserEvent(_) => {
-                samples = load(&path).unwrap();
-                true
-            }
+            Event::UserEvent(_) => match load(&path) {
+                Ok(new_samples) => {
+                    samples = new_samples;
+                    true
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    false
+                }
+            },
             Event::RedrawRequested(window_id) if window_id == window.id() => true,
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
