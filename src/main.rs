@@ -68,8 +68,8 @@ fn generate(samples: &[f64], width: u32, height: u32) -> RgbImage {
         }
 
         // draw reddish if clipping?
-        let color = if s.abs() > 1.0f64 {
-            [0xff, 0x33, 0x33]
+        let color = if s.abs() >= 1.0f64 {
+            [0xcc, 0x33, 0x33]
         } else {
             [0x33; 3]
         };
